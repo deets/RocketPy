@@ -59,7 +59,7 @@ class Controller:
         self.name = name
         self.print = _ControllerPrints
 
-    def __call__(self, time, state_vector):
+    def __call__(self, previous_time, time, state_vector):
         """Call the controller function. This is used by the simulation class.
 
         Parameters
@@ -75,7 +75,9 @@ class Controller:
         -------
         None
         """
-        self.controller_function(time, state_vector, self.observed_objects)
+        self.controller_function(
+            previous_time, time, state_vector, self.observed_objects
+        )
 
     def __str__(self):
         return self.name

@@ -692,7 +692,7 @@ class Flight:
                     callback(self)
 
                 for controller in node.controllers:
-                    controller(self.t, self.y_sol)
+                    controller(self.solution[-1][0], self.t, self.y_sol)
 
                 for parachute in node.parachutes:
                     # Calculate and save pressure signal
