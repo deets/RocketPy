@@ -110,7 +110,6 @@ class Tank(ABC):
         # Initialize plots and prints object
         self.prints = _TankPrints(self)
         self.plots = _TankPlots(self)
-        return None
 
     @property
     def flux_time(self):
@@ -414,6 +413,73 @@ class Tank(ABC):
         """Draws the tank geometry."""
         self.plots.draw()
 
+    def _check_volume_bounds(self):
+        """Checks if the tank is overfilled or underfilled. Raises a ValueError
+        if the tank is overfilled or underfilled.
+        """
+        if (self.fluid_volume > self.geometry.total_volume + 1e-6).any():
+            raise ValueError(
+                f"The tank '{self.name}' is overfilled. The fluid volume is "
+                + "greater than the total volume of the tank.\n\t\t"
+                + "Try increasing the tank height, or reducing the initial liquid"
+                + " mass, or reducing the mass flow rates.\n\t\t"
+                + f"The fluid volume is {np.max(self.fluid_volume.y_array):.3f} m³ at "
+                + f"{self.fluid_volume.x_array[np.argmax(self.fluid_volume.y_array)]:.3f} s."
+            )
+        elif (self.fluid_volume < -1e-6).any():
+            raise ValueError(
+                f"The tank '{self.name}' is underfilled. The fluid volume is "
+                + "negative.\n\t\t"
+                + "Try increasing the initial liquid mass, or reducing the mass"
+                + " flow rates.\n\t\t"
+                + f"The fluid volume is {np.min(self.fluid_volume.y_array):.3f} m³ at "
+                + f"{self.fluid_volume.x_array[np.argmin(self.fluid_volume.y_array)]:.3f} s."
+            )
+
+    def _check_height_bounds(self):
+        """Checks if the tank is overfilled or underfilled. Raises a ValueError
+        if the tank is overfilled or underfilled.
+        """
+        top_tolerance = self.geometry.top + 1e-4
+        bottom_tolerance = self.geometry.bottom - 1e-4
+
+        if (self.liquid_height > top_tolerance).any():
+            raise ValueError(
+                f"The tank '{self.name}' is overfilled. "
+                + f"The liquid height is above the tank top.\n\t\t"
+                + "Try increasing the tank height, or reducing the initial liquid"
+                + " mass, or reducing the mass flow rates.\n\t\t"
+                + f"The liquid height is {np.max(self.liquid_height.y_array):.3f} m above "
+                + f"the tank top at {self.liquid_height.x_array[np.argmax(self.liquid_height.y_array)]:.3f} s."
+            )
+        elif (self.liquid_height < bottom_tolerance).any():
+            raise ValueError(
+                f"The tank '{self.name}' is underfilled. "
+                + "The liquid height is below the tank bottom.\n\t\t"
+                + "Try increasing the initial liquid mass, or reducing the mass"
+                + " flow rates.\n\t\t"
+                + f"The liquid height is {np.min(self.liquid_height.y_array):.3f} m below "
+                + f"the tank bottom at {self.liquid_height.x_array[np.argmin(self.liquid_height.y_array)]:.3f} s."
+            )
+        elif (self.gas_height > top_tolerance).any():
+            raise ValueError(
+                f"The tank '{self.name}' is overfilled. "
+                + "The gas height is above the tank top.\n\t\t"
+                + "Try increasing the tank height, or reducing the initial liquid"
+                + " mass, or reducing the mass flow rates.\n\t\t"
+                + f"The gas height is {np.max(self.gas_height.y_array):.3f} m above "
+                + f"the tank top at {self.gas_height.x_array[np.argmax(self.gas_height.y_array)]:.3f} s."
+            )
+        elif (self.gas_height < bottom_tolerance).any():
+            raise ValueError(
+                f"The tank '{self.name}' is underfilled. "
+                + "The gas height is below the tank bottom.\n\t\t"
+                + "Try increasing the initial liquid mass, or reducing the mass"
+                + " flow rates.\n\t\t"
+                + f"The gas height is {np.min(self.gas_height.y_array):.3f} m below "
+                + f"the tank bottom at {self.gas_height.x_array[np.argmin(self.gas_height.y_array)]:.3f} s."
+            )
+
 
 class MassFlowRateBasedTank(Tank):
     """Class to define a tank based on mass flow rates inputs. This class
@@ -535,7 +601,10 @@ class MassFlowRateBasedTank(Tank):
 
         # Discretize input flow if needed
         self.discretize_flow() if discretize else None
-        return None
+
+        # Check if the tank is overfilled or underfilled
+        self._check_volume_bounds()
+        self._check_height_bounds()
 
     @funcify_method("Time (s)", "Mass (kg)")
     def fluid_mass(self):
@@ -561,18 +630,7 @@ class MassFlowRateBasedTank(Tank):
         Function
             Mass of the liquid as a function of time.
         """
-        liquid_flow = self.net_liquid_flow_rate.integral_function()
-        liquid_mass = self.initial_liquid_mass + liquid_flow
-        if (liquid_mass < 0).any():
-            raise ValueError(
-                f"The tank {self.name} is underfilled. "
-                + "The liquid mass is negative given the mass flow rates.\n\t\t"
-                + "Try increasing the initial liquid mass, or reducing the mass"
-                + "flow rates.\n\t\t"
-                + f"The liquid mass is {np.min(liquid_mass.y_array):.3f} kg at "
-                + f"{liquid_mass.x_array[np.argmin(liquid_mass.y_array)]} s."
-            )
-        return liquid_mass
+        return self.initial_liquid_mass + self.net_liquid_flow_rate.integral_function()
 
     @funcify_method("Time (s)", "Mass (kg)")
     def gas_mass(self):
@@ -585,19 +643,7 @@ class MassFlowRateBasedTank(Tank):
         Function
             Mass of the gas as a function of time.
         """
-        gas_flow = self.net_gas_flow_rate.integral_function()
-        gas_mass = self.initial_gas_mass + gas_flow
-        if (gas_mass < -1e-6).any():  # -1e-6 is to avoid numerical errors
-            raise ValueError(
-                f"The tank {self.name} is underfilled. The gas mass is negative"
-                + " given the mass flow rates.\n\t\t"
-                + "Try increasing the initial gas mass, or reducing the mass"
-                + " flow rates.\n\t\t"
-                + f"The gas mass is {np.min(gas_mass.y_array):.3f} kg at "
-                + f"{gas_mass.x_array[np.argmin(gas_mass.y_array)]} s."
-            )
-
-        return gas_mass
+        return self.initial_gas_mass + self.net_gas_flow_rate.integral_function()
 
     @funcify_method("Time (s)", "liquid mass flow rate (kg/s)", extrapolation="zero")
     def net_liquid_flow_rate(self):
@@ -691,30 +737,7 @@ class MassFlowRateBasedTank(Tank):
         Function
             Height of the ullage as a function of time.
         """
-        liquid_height = self.geometry.inverse_volume.compose(self.liquid_volume)
-        diff_bt = liquid_height - self.geometry.bottom
-        diff_up = liquid_height - self.geometry.top
-
-        if (diff_bt < 0).any():
-            raise ValueError(
-                f"The tank '{self.name}' is underfilled. The liquid height is "
-                + "below the tank bottom.\n\t\t"
-                + "Try increasing the initial liquid mass, or reducing the mass"
-                + " flow rates.\n\t\t"
-                + f"The liquid height is {np.min(diff_bt.y_array):.3f} m below "
-                + f"the tank bottom at {diff_bt.x_array[np.argmin(diff_bt.y_array)]:.3f} s."
-            )
-        if (diff_up > 0).any():
-            raise ValueError(
-                f"The tank '{self.name}' is overfilled. The liquid height is "
-                + "above the tank top.\n\t\t"
-                + "Try increasing the tank height, or reducing the initial liquid"
-                + " mass, or reducing the mass flow rates.\n\t\t"
-                + f"The liquid height is {np.max(diff_up.y_array):.3f} m above "
-                + f"the tank top at {diff_up.x_array[np.argmax(diff_up.y_array)]:.3f} s."
-            )
-
-        return liquid_height
+        return self.geometry.inverse_volume.compose(self.liquid_volume)
 
     @funcify_method("Time (s)", "Height (m)")
     def gas_height(self):
@@ -728,19 +751,7 @@ class MassFlowRateBasedTank(Tank):
         Function
             Height of the ullage as a function of time.
         """
-        fluid_volume = self.gas_volume + self.liquid_volume
-        gas_height = self.geometry.inverse_volume.compose(fluid_volume)
-        diff = gas_height - self.geometry.top
-        if (diff > 0).any():
-            raise ValueError(
-                f"The tank '{self.name}' is overfilled. "
-                + "The gas height is above the tank top.\n\t\t"
-                + "Try increasing the tank height, or reducing fluids' mass,"
-                + " or double check the mass flow rates.\n\t\t"
-                + f"The gas height is {np.max(diff.y_array):.3f} m above "
-                + f"the tank top at {diff.x_array[np.argmax(diff.y_array)]} s."
-            )
-        return gas_height
+        return self.geometry.inverse_volume.compose(self.fluid_volume)
 
     def discretize_flow(self):
         """Discretizes the mass flow rate inputs according to the flux time and
@@ -814,15 +825,9 @@ class UllageBasedTank(Tank):
         # Discretize input if needed
         self.discretize_ullage() if discretize else None
 
-        # Check if the ullage is within bounds
-        if (self.ullage > self.geometry.total_volume).any():
-            raise ValueError(
-                "The ullage volume is out of bounds. It is greater than the "
-                + "total volume of the tank."
-            )
-        if (self.ullage < 0).any():
-            raise ValueError("The ullage volume is out of bounds. It is negative.")
-        return None
+        # Check if the tank is overfilled or underfilled
+        self._check_volume_bounds()
+        self._check_height_bounds()
 
     @funcify_method("Time (s)", "Mass (kg)")
     def fluid_mass(self):
@@ -862,7 +867,9 @@ class UllageBasedTank(Tank):
         Function
             Volume of the fluid as a function of time.
         """
-        return self.geometry.total_volume
+        return Function(self.geometry.total_volume).set_discrete_based_on_model(
+            self.gas_volume
+        )
 
     @funcify_method("Time (s)", "Volume (m³)")
     def liquid_volume(self):
@@ -1012,13 +1019,9 @@ class LevelBasedTank(Tank):
         # Discretize input if needed
         self.discretize_liquid_height() if discretize else None
 
-        # Check if the liquid level is within bounds
-        if (self.liquid_level > self.geometry.top).any():
-            raise ValueError(
-                "The liquid level is out of bounds. It is greater than the tank top."
-            )
-        if (self.liquid_level < self.geometry.bottom).any():
-            raise ValueError("The liquid level is out of bounds. It is negative.")
+        # Check if the tank is overfilled or underfilled
+        self._check_volume_bounds()
+        self._check_height_bounds()
 
     @funcify_method("Time (s)", "Mass (kg)")
     def fluid_mass(self):
@@ -1031,10 +1034,7 @@ class LevelBasedTank(Tank):
         Function
             Mass of the tank as a function of time. Units in kg.
         """
-        # TODO: there's a bug in the net_mass_flow_rate if I don't discretize here
-        sum_mass = self.liquid_mass + self.gas_mass
-        sum_mass.set_discrete_based_on_model(self.liquid_level)
-        return sum_mass
+        return self.liquid_mass + self.gas_mass
 
     @funcify_method("Time (s)", "Mass flow rate (kg/s)")
     def net_mass_flow_rate(self):
@@ -1061,16 +1061,7 @@ class LevelBasedTank(Tank):
         Function
             Volume of the fluid as a function of time.
         """
-        volume = self.gas_volume + self.liquid_volume
-        diff = abs(volume - self.geometry.total_volume)
-        if (diff > 1e-6).any():
-            raise ValueError(
-                "The `fluid_volume`, defined as the sum of `gas_volume` and "
-                + "`liquid_volume`, is not equal to the total volume of the tank."
-                + "\n\t\tThe difference is more than 1e-6 m^3 at "
-                + f"{diff.x_array[np.argmin(diff.y_array)]} s."
-            )
-        return volume
+        return self.gas_volume + self.liquid_volume
 
     @funcify_method("Time (s)", "Volume (m³)")
     def liquid_volume(self):
@@ -1095,11 +1086,7 @@ class LevelBasedTank(Tank):
         Function
             Volume of the gas as a function of time.
         """
-        # TODO: there's a bug on the gas_center_of_mass is I don't discretize here
-        func = Function(self.geometry.total_volume)
-        func -= self.liquid_volume
-        func.set_discrete_based_on_model(self.liquid_volume)
-        return func
+        return -(self.liquid_volume - self.geometry.total_volume)
 
     @funcify_method("Time (s)", "Height (m)")
     def liquid_height(self):
@@ -1230,6 +1217,10 @@ class MassBasedTank(Tank):
         # Discretize input if needed
         self.discretize_masses() if discretize else None
 
+        # Check if the tank is overfilled or underfilled
+        self._check_volume_bounds()
+        self._check_height_bounds()
+
     @funcify_method("Time (s)", "Mass (kg)")
     def fluid_mass(self):
         """
@@ -1343,28 +1334,7 @@ class MassBasedTank(Tank):
         Function
             Height of the ullage as a function of time.
         """
-        liquid_height = self.geometry.inverse_volume.compose(self.liquid_volume)
-        diff_bt = liquid_height - self.geometry.bottom
-        diff_up = liquid_height - self.geometry.top
-
-        if (diff_bt < 0).any():
-            raise ValueError(
-                f"The tank {self.name} is underfilled. The liquid height is below "
-                + "the tank bottom.\n\t\tTry increasing the initial liquid mass, "
-                + "or reducing the mass flow rates.\n\t\t"
-                + f"The liquid height is {np.min(diff_bt.y_array):.3f} m below "
-                + f"the tank bottom at {diff_bt.x_array[np.argmin(diff_bt.y_array)]:.3f} s."
-            )
-        if (diff_up > 0).any():
-            raise ValueError(
-                f"The tank {self.name} is overfilled. The liquid height is above "
-                + "the tank top.\n\t\tTry increasing the tank height, or reducing "
-                + "the initial liquid mass, or reducing the mass flow rates.\n\t\t"
-                + f"The liquid height is {np.max(diff_up.y_array):.3f} m above "
-                + f"the tank top at {diff_up.x_array[np.argmax(diff_up.y_array)]:.3f} s."
-            )
-
-        return liquid_height
+        return self.geometry.inverse_volume.compose(self.liquid_volume)
 
     @funcify_method("Time (s)", "Height (m)")
     def gas_height(self):
@@ -1378,18 +1348,7 @@ class MassBasedTank(Tank):
         Function
             Height of the ullage as a function of time.
         """
-        fluid_volume = self.gas_volume + self.liquid_volume
-        gas_height = self.geometry.inverse_volume.compose(fluid_volume)
-        diff = gas_height - self.geometry.top
-        if (diff > 0).any():
-            raise ValueError(
-                f"The tank {self.name} is overfilled. The gas height is above "
-                + "the tank top.\n\t\tTry increasing the tank height, or "
-                + "reducing fluids' mass, or double check the mass flow rates."
-                + f"\n\t\tThe gas height is {np.max(diff.y_array):.3f} m "
-                + f"above the tank top at {diff.x_array[np.argmax(diff.y_array)]} s."
-            )
-        return gas_height
+        return self.geometry.inverse_volume.compose(self.fluid_volume)
 
     def discretize_masses(self):
         """Discretizes the fluid mass inputs according to the flux time
