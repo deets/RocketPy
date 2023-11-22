@@ -167,7 +167,7 @@ def test_mass_based_tank():
     real_tank_lox = MassBasedTank(
         name="Real Tank",
         geometry=real_geometry,
-        flux_time=(0, 10),
+        flux_time=(0, 15.5),
         liquid_mass=lox_masses,
         gas_mass=gas_masses,
         liquid=lox,
