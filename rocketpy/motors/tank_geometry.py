@@ -181,7 +181,7 @@ class TankGeometry:
         """
         return np.pi * self.radius**2
 
-    @funcify_method("Height (m)", "Volume (m³)", extrapolation="zero")
+    @funcify_method("Height (m)", "Volume (m³)")
     def volume(self):
         """
         The volume of the tank as a function of height.
@@ -205,7 +205,7 @@ class TankGeometry:
         """
         return self.volume(self.top)
 
-    @funcify_method("Volume (m³)", "Height (m)", extrapolation="natural")
+    @funcify_method("Volume (m³)", "Height (m)")
     def inverse_volume(self):
         """
         The height of the tank as a function of volume.
